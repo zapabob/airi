@@ -18,7 +18,12 @@ export async function setupBeatSync() {
 
   protectPrivilegedWindowNavigation(window)
 
-  await load(window, baseUrl(resolve(getElectronMainDirname(), '..', 'renderer'), 'beat-sync.html'))
+  // NOTICE: BeatSync is a background capture window. Its renderer can take a long
+  // time to finish loading, and blocking DI here prevents the user-facing window
+  // from being created. Keep the window handle available immediately and surface
+  // asynchronous navigation failures through the main-process logger.
+  void load(window, baseUrl(resolve(getElectronMainDirname(), '..', 'renderer'), 'beat-sync.html'))
+    .catch(error => console.error('[BeatSync] Failed to load renderer:', error))
 
   initScreenCaptureForWindow(window)
 

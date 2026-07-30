@@ -83,7 +83,10 @@ export async function setupMainWindow(params: {
     height: mainWindowConfig?.height ?? 600.0,
     x: mainWindowConfig?.x,
     y: mainWindowConfig?.y,
-    show: false,
+    // The renderer may finish after the first ready-to-show event while the
+    // background BeatSync window is initializing. Start the user-facing window
+    // visible so a missed event cannot leave AIRI running without a desktop UI.
+    show: true,
     icon,
     webPreferences: {
       preload: join(dirname(fileURLToPath(import.meta.url)), '../preload/index.mjs'),
