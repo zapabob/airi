@@ -1394,7 +1394,10 @@ pages:
           title: Terrain de test de transcription
       aihubmix:
         title: AIHubMix
-        description: https://aihubmix.com (10 % de réduction)
+        description: https://aihubmix.com (10% de réduction)
+      hermes:
+        title: Hermes Agent
+        description: Hermes Agent gateway (localhost:8642) — fused with AIRI for long-term memory and tool/skill execution.
     title: Fournisseurs
   connection:
     description: Configurer la connexion au serveur WebSocket

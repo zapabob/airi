@@ -24,6 +24,8 @@ import { useChatSessionStore } from './chat/session-store'
 import { useChatStreamStore } from './chat/stream-store'
 import { useContextObservabilityStore } from './devtools/context-observability'
 import { useLLM } from './llm'
+import { streamHermesRun } from './hermes-runs-bridge'
+import { useProvidersStore } from './providers'
 import { useLlmToolsetPromptsStore } from './llm-toolset-prompts'
 import { useAiriCardStore } from './modules/airi-card'
 import { useAutonomousArtistryStore } from './modules/artistry-autonomous'
@@ -89,12 +91,80 @@ export const useChatOrchestratorStore = defineStore('chat-orchestrator', () => {
   const pendingQueuedSendCount = ref(0)
   let ownedActiveTurnSpan: typeof activeTurnSpan.value
 
+  /**
+   * Drives a full Hermes Agent run through the gateway's `/v1/runs` SSE endpoint
+   * and forwards its lifecycle events into the chat stream store.
+   *
+   * The `X-Hermes-Session-Key` header scopes Honcho long-term memory per AIRI
+   * chat session, so the companion remembers across turns/transcripts. Model and
+   * gateway URL come from the `hermes` provider config.
+   */
+  async function streamViaHermesRun(
+    model: string,
+    messages: Message[],
+    options?: StreamOptions,
+  ) {
+    const providersStore = useProvidersStore()
+    const config = providersStore.getProviderConfig('hermes') || {}
+    const baseUrl = typeof config.baseUrl === 'string' && config.baseUrl.trim()
+      ? config.baseUrl.trim()
+      : 'http://localhost:8642/v1/'
+    const apiKey = typeof config.apiKey === 'string' ? config.apiKey.trim() : ''
+
+    // Stable memory scope: one Honcho session per AIRI chat session.
+    const sessionKey = activeSessionId.value || 'airi-default'
+
+    const llmSpan = startSpan(IOSpanNames.LLMInference, activeTurnSpan.value, {
+      [IOAttributes.Subsystem]: IOSubsystems.LLM,
+      [IOAttributes.GenAIRequestModel]: model,
+    })
+    const llmRequestTs = performance.now()
+    let llmFirstTokenEmitted = false
+
+    try {
+      await streamHermesRun({
+        baseUrl,
+        apiKey: apiKey || undefined,
+        model: model || 'hermes-agent',
+        sessionKey,
+        sessionId: sessionKey,
+        messages,
+        options,
+        onStreamEvent: async (event) => {
+          if (isTextDelta(event) && !llmFirstTokenEmitted) {
+            llmFirstTokenEmitted = true
+            llmSpan.addEvent(IOEvents.LLMFirstToken, {
+              [IOAttributes.LLM_TTFT]: performance.now() - llmRequestTs,
+            })
+          }
+          await options?.onStreamEvent?.(event)
+        },
+        onDone: () => {
+          llmSpan.end()
+        },
+      })
+    }
+    catch (error) {
+      llmSpan.end()
+      throw error
+    }
+  }
+
   async function streamWithStageAdapters(
     model: string,
     chatProvider: ChatProvider,
     messages: Message[],
     options?: StreamOptions,
   ) {
+    // Fusion branch: when the active provider is the Hermes Agent gateway, drive
+    // the full agent run via /v1/runs instead of the stateless chat/completions
+    // path. This is what fuses AIRI's chat surface with Hermes' long-term memory
+    // (Honcho, scoped via X-Hermes-Session-Key) and tool/skill execution.
+    if (activeProvider.value === 'hermes') {
+      await streamViaHermesRun(model, messages, options)
+      return
+    }
+
     let llmTextLength = 0
     const headers = { ...options?.headers }
     if (providerMode(activeProvider.value) === 'official' && options?.requestCorrelation) {

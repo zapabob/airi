@@ -149,6 +149,23 @@ export function sharedUnoConfig() {
         collections: {
           ...createExternalPackageIconLoader('@proj-airi/lobe-icons'),
           ...createExternalPackageIconLoader('@proj-airi/iconify-meteocons'),
+          // NOTICE:
+          // `collections` disables preset-icons' automatic `@iconify-json/*` resolution.
+          // Without these explicit loaders, all standard collections (i-solar:, i-ph:, ...)
+          // silently fail and every icon renders as an empty box ("blank panel").
+          // Keep in sync with apps/stage-tamagotchi devDependencies.
+          ...createExternalPackageIconLoader('@iconify-json/solar'),
+          ...createExternalPackageIconLoader('@iconify-json/ph'),
+          ...createExternalPackageIconLoader('@iconify-json/lucide'),
+          ...createExternalPackageIconLoader('@iconify-json/simple-icons'),
+          ...createExternalPackageIconLoader('@iconify-json/svg-spinners'),
+          ...createExternalPackageIconLoader('@iconify-json/carbon'),
+          ...createExternalPackageIconLoader('@iconify-json/eos-icons'),
+          ...createExternalPackageIconLoader('@iconify-json/vscode-icons'),
+          ...createExternalPackageIconLoader('@iconify-json/mingcute'),
+          ...createExternalPackageIconLoader('@iconify-json/tabler'),
+          ...createExternalPackageIconLoader('@iconify-json/material-symbols'),
+          ...createExternalPackageIconLoader('@iconify-json/line-md'),
         },
       }),
       presetScrollbar(),

@@ -1394,7 +1394,10 @@ pages:
           title: Thử nghiệm chuyển văn bản
       aihubmix:
         title: AIHubMix
-        description: https://aihubmix.com (Giảm giá 10%)
+        description: https://aihubmix.com (10% off)
+      hermes:
+        title: Hermes Agent
+        description: Hermes Agent gateway (localhost:8642) — fused with AIRI for long-term memory and tool/skill execution.
     title: Nhà cung cấp
   connection:
     description: Cấu hình kết nối máy chủ WebSocket

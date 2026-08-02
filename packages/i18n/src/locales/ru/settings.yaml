@@ -1394,8 +1394,11 @@ pages:
           title: Песочница транскрипции
       aihubmix:
         title: AIHubMix
-        description: https://aihubmix.com (скидка 10%)
-    title: Провайдеры
+        description: https://aihubmix.com (10% off)
+      hermes:
+        title: Hermes Agent
+        description: Hermes Agent gateway (localhost:8642) — fused with AIRI for long-term memory and tool/skill execution.
+    title: Поставщики
   connection:
     description: Настроить соединение сервера WebSocket
     title: Подключение

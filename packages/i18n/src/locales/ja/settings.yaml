@@ -1395,6 +1395,9 @@ pages:
       aihubmix:
         title: AIHubMix
         description: https://aihubmix.com (10% off)
+      hermes:
+        title: Hermes Agent
+        description: Hermes Agent ゲートウェイ (localhost:8642) — AIRI と融合し長期記憶・ツール/スキル実行を提供。
     title: プロバイダー
   connection:
     description: WebSocketサーバー接続の設定

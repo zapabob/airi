@@ -1394,8 +1394,11 @@ pages:
           title: 實驗平台
       aihubmix:
         title: AIHubMix
-        description: https://aihubmix.com (10% 優惠)
-    title: 服務來源
+        description: https://aihubmix.com (10% off)
+      hermes:
+        title: Hermes Agent
+        description: Hermes Agent gateway (localhost:8642) — fused with AIRI for long-term memory and tool/skill execution.
+    title: 供應商
   connection:
     description: 配置 WebSocket 伺服器連接
     title: 連線

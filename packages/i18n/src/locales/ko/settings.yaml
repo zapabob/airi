@@ -1394,8 +1394,11 @@ pages:
           title: 전사 놀이터
       aihubmix:
         title: AIHubMix
-        description: https://aihubmix.com (10% 할인)
-    title: 제공자
+        description: https://aihubmix.com (10% off)
+      hermes:
+        title: Hermes Agent
+        description: Hermes Agent gateway (localhost:8642) — fused with AIRI for long-term memory and tool/skill execution.
+    title: 공급자
   connection:
     description: 웹소켓 서버 연결 구성
     title: 연결

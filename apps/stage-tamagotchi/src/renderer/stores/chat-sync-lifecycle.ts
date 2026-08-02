@@ -2,6 +2,8 @@ import { useChatSyncStore } from './chat-sync'
 
 type ChatSyncWindowRole = 'authority' | 'follower' | 'client'
 
+const AUTHORITY_FALLBACK_DELAY_MS = 5000
+
 function normalizeRoutePath(routePath: string) {
   const [path = ''] = routePath.split(/[?#]/)
   return path || '/'
@@ -36,14 +38,39 @@ function resolveChatSyncWindowRole(routePath: string): ChatSyncWindowRole | null
 export function createChatSyncWindowLifecycle(routePath: string, hash?: string) {
   const chatSyncStore = useChatSyncStore()
   const role = resolveChatSyncWindowRole(resolveInitialChatSyncRoutePath(routePath, hash))
+  let authorityFallbackTimer: ReturnType<typeof setTimeout> | undefined
+
+  function clearAuthorityFallbackTimer() {
+    if (authorityFallbackTimer) {
+      clearTimeout(authorityFallbackTimer)
+      authorityFallbackTimer = undefined
+    }
+  }
 
   return {
     role,
     initialize() {
-      if (role)
-        chatSyncStore.initialize(role)
+      if (!role)
+        return
+
+      chatSyncStore.initialize(role)
+
+      // In normal operation the main `/` window announces itself as the
+      // authority. If that window failed to load, the standalone Chat window
+      // would otherwise remain a follower forever and every request would
+      // time out. Promote only when no authority announcement was observed;
+      // this preserves the normal main-window authority path.
+      if (role === 'follower') {
+        clearAuthorityFallbackTimer()
+        authorityFallbackTimer = setTimeout(() => {
+          authorityFallbackTimer = undefined
+          if (!chatSyncStore.authorityId)
+            chatSyncStore.initialize('authority')
+        }, AUTHORITY_FALLBACK_DELAY_MS)
+      }
     },
     dispose() {
+      clearAuthorityFallbackTimer()
       if (role)
         chatSyncStore.dispose()
     },

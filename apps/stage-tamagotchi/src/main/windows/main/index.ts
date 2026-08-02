@@ -31,7 +31,7 @@ import icon from '../../../../resources/icon.png?asset'
 
 import { electronStartDraggingWindow } from '../../../shared/eventa'
 import { onAppBeforeQuit } from '../../libs/bootkit/lifecycle'
-import { baseUrl, getElectronMainDirname, load } from '../../libs/electron/location'
+import { baseUrl, getElectronMainDirname, load, withHashRoute } from '../../libs/electron/location'
 import { createConfig } from '../../libs/electron/persistence'
 import { protectPrivilegedWindowNavigation, transparentWindowConfig } from '../shared'
 import { setupMainWindowElectronInvokes } from './rpc/index.electron'
@@ -191,7 +191,9 @@ export async function setupMainWindow(params: {
     windowAuthManager: params.windowAuthManager,
   })
 
-  await load(window, baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')))
+  // Keep the main renderer on the `/` route so it remains the chat-sync
+  // authority; the separate Chat window owns the `/chat` follower route.
+  await load(window, withHashRoute(baseUrl(resolve(getElectronMainDirname(), '..', 'renderer')), '/'))
 
   /**
    * This is a know issue (or expected behavior maybe) to Electron.

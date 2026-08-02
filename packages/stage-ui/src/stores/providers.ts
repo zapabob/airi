@@ -2315,6 +2315,78 @@ export const useProvidersStore = defineStore('providers', () => {
       },
     },
     'google-gemini-audio-speech': buildGoogleGeminiSpeechProvider(v => baseUrlValidator.value(v)),
+
+    // Hermes gateway bridge provider. The chat/completions path (used as a
+    // fallback when the /v1/runs agent bridge is unavailable) is OpenAI
+    // compatible, so createOpenAI works as the underlying creator. The real
+    // "A side" value — Honcho long-term memory + tool/skill execution — is
+    // reached via the dedicated /v1/runs SSE bridge wired in chat.ts, keyed
+    // off this provider id.
+    'hermes': buildOpenAICompatibleProvider({
+      id: 'hermes',
+      name: 'Hermes Agent',
+      nameKey: 'settings.pages.providers.provider.hermes.title',
+      descriptionKey: 'settings.pages.providers.provider.hermes.description',
+      icon: 'i-carbon:ai-status',
+      description: 'Hermes Agent gateway (localhost:8642)',
+      category: 'chat',
+      tasks: ['text-generation', 'agent'],
+      defaultBaseUrl: 'http://localhost:8642/v1/',
+      creator: createOpenAI,
+      capabilities: {
+        listModels: async (config: Record<string, unknown>) => {
+          const apiKey = typeof config.apiKey === 'string' ? config.apiKey.trim() : ''
+          const baseUrl = typeof config.baseUrl === 'string' ? config.baseUrl.trim() : ''
+          if (!apiKey && !baseUrl)
+            return []
+          try {
+            const models = await listModels({
+              apiKey: apiKey || undefined,
+              baseURL: (baseUrl || 'http://localhost:8642/v1/') as `${string}/`,
+            })
+            if (models.length > 0)
+              return models.map((model: any) => ({
+                id: model.id,
+                name: model.name || model.display_name || model.id,
+                provider: 'hermes',
+                description: model.description || 'Hermes Agent model',
+                contextLength: model.context_length || 0,
+                deprecated: false,
+              }) satisfies ModelInfo)
+          }
+          catch {
+            // Gateway down or unreachable — expose the virtual model anyway so
+            // the user can still select it and start the bridge.
+          }
+          return [{
+            id: 'hermes-agent',
+            name: 'Hermes Agent',
+            provider: 'hermes',
+            description: 'Default Hermes Agent virtual model',
+            contextLength: 0,
+            deprecated: false,
+          }] satisfies ModelInfo[]
+        },
+      },
+      validators: {
+        chatPingCheckAvailable: false,
+        validateProviderConfig: (config) => {
+          const errors = [
+            !config.baseUrl && new Error('Base URL is required. Default to http://localhost:8642/v1/ for the Hermes Agent gateway.'),
+          ].filter(Boolean)
+
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res)
+            return res
+
+          return {
+            errors,
+            reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+            valid: !!config.baseUrl,
+          }
+        },
+      },
+    }),
   }
 
   const VISION_PROVIDER_ID_PREFIX = 'vision-'

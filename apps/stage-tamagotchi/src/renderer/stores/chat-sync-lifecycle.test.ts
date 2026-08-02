@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const chatSyncStoreMock = vi.hoisted(() => ({
+  authorityId: null as string | null,
   dispose: vi.fn(),
   initialize: vi.fn(),
 }))
@@ -16,6 +17,8 @@ describe('createChatSyncWindowLifecycle', async () => {
   } = await import('./chat-sync-lifecycle')
 
   beforeEach(() => {
+    vi.useRealTimers()
+    chatSyncStoreMock.authorityId = null
     chatSyncStoreMock.dispose.mockClear()
     chatSyncStoreMock.initialize.mockClear()
   })
@@ -40,6 +43,18 @@ describe('createChatSyncWindowLifecycle', async () => {
 
     expect(chatSyncStoreMock.initialize).toHaveBeenCalledWith('follower')
     expect(chatSyncStoreMock.dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('promotes a chat window when no authority announces itself', () => {
+    vi.useFakeTimers()
+    const lifecycle = createChatSyncWindowLifecycle('/', '#/chat')
+
+    lifecycle.initialize()
+    vi.advanceTimersByTime(5000)
+
+    expect(chatSyncStoreMock.initialize).toHaveBeenNthCalledWith(1, 'follower')
+    expect(chatSyncStoreMock.initialize).toHaveBeenNthCalledWith(2, 'authority')
+    lifecycle.dispose()
   })
 
   it('resolves spotlight windows as followers', () => {
