@@ -269,7 +269,7 @@ export const useProviderConfigStore = defineStore('provider-config', () => {
 
     const localProvider = {
       ...provider,
-      config: { ...config },
+      config: { ...provider.config, ...config },
       status,
     }
     providers.value[providerId] = localProvider
