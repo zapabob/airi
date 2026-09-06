@@ -30,6 +30,7 @@ const creatingNew = ref(false)
 const newProfileName = ref('')
 const nameInputRef = ref<HTMLInputElement>()
 const containerRef = ref<HTMLElement>()
+const createFormRef = ref<HTMLElement>()
 
 const cardsList = computed(() =>
   Array.from(cards.value.entries()).map(([id, card]) => ({ id, name: card.name })),
@@ -87,7 +88,9 @@ watch(selectedProfile, (value, previousValue) => {
   handleSelection(value)
 })
 
-onClickOutside(containerRef, () => {
+
+
+onClickOutside([containerRef, createFormRef], () => {
   open.value = false
   cancelCreate()
 })
@@ -277,6 +280,7 @@ function toggleOpen() {
     >
       <div
         v-if="creatingNew"
+        ref="createFormRef"
         :class="[
           'absolute right-0 z-[10011] w-56 rounded-xl border-2 p-2 shadow-sm backdrop-blur-xl',
           placement === 'up' ? 'bottom-full mb-2 origin-bottom-right' : 'top-full mt-2 origin-top-right',

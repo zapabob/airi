@@ -143,3 +143,7 @@ apps/stage-tamagotchi/electron.vite.config.*.mjs
 
 docs/ai/context/verifications/
 .playwright-mcp/
+
+# Local backup made while investigating the profile switcher; never vendor
+# operator snapshots as source.
+tools.ts.original
