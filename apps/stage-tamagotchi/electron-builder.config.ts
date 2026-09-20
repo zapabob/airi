@@ -72,32 +72,32 @@ export default {
   //   })
   // },
   files: [
-    'out/**',
-    'resources/**',
-    'package.json',
-    // NOTICE: Exclude npm `electron` package from app payload.
-    // Electron runtime is already provided by the outer app bundle; bundling a nested
-    // `node_modules/electron/dist/Electron.app` makes electron-builder deep-sign it and
-    // fails on non-code resources (for example `locale.pak`) with timestamp/signing errors.
-    '!**/node_modules/electron{,/**}',
-    '!**/.vscode/*',
-    // The renderer uses the browser ONNX backend. The node package and its
-    // platform binaries are not loaded by the packaged renderer.
-    '!**/node_modules/onnxruntime-node{,/**}',
-    // Vite bundles the browser runtime and its WASM assets into `out/renderer`.
-    '!**/node_modules/onnxruntime-web{,/**}',
-    '!src/**/*',
-    '!**/node_modules/**/{CHANGELOG.md,README.md,README,readme.md,readme}',
-    '!**/node_modules/**/{.turbo,test,src,__tests__,tests,example,examples}',
-    '**/node_modules/debug/**/*',
-    '**/node_modules/superjson/**/*',
-    '!electron.vite.config.{js,ts,mjs,cjs}',
-    '!vite.config.{js,ts,mjs,cjs}',
-    '!uno.config.{js,ts,mjs,cjs}',
-    '!{.eslintcache,eslint.config.ts,.yaml,dev-app-update.yml,CHANGELOG.md,README.md}',
-    '!{.env,.env.*,.npmrc,pnpm-lock.yaml}',
-    '!{tsconfig.json}',
-  ],
+      'out/**',
+      'resources/**',
+      'package.json',
+      // NOTICE: Exclude npm `electron` package from app payload.
+      // Electron runtime is already provided by the outer app bundle; bundling a nested
+      // `node_modules/electron/dist/Electron.app` makes electron-builder deep-sign it and
+      // fails on non-code resources (for example `locale.pak`) with timestamp/signing errors.
+      '!**/node_modules/electron{,/**}',
+      '!**/.vscode/*',
+      // The renderer uses the browser ONNX backend. The node package and its
+      // platform binaries are not loaded by the packaged renderer.
+      '!**/node_modules/onnxruntime-node{,/**}',
+      // Vite bundles the browser runtime and its WASM assets into `out/renderer`. Exclude to avoid duplicating the packaged app.
+      '!**/node_modules/onnxruntime-web{,/**}',
+      '!src/**/*',
+      '!**/node_modules/**/{CHANGELOG.md,README.md,README,readme.md,readme}',
+      '!**/node_modules/**/{.turbo,test,src,__tests__,tests,example,examples}',
+      '**/node_modules/debug/**/*',
+      '**/node_modules/superjson/**/*',
+      '!electron.vite.config.{js,ts,mjs,cjs}',
+      '!vite.config.{js,ts,mjs,cjs}',
+      '!uno.config.{js,ts,mjs,cjs}',
+      '!{.eslintcache,eslint.config.ts,.yaml,dev-app-update.yml,CHANGELOG.md,README.md}',
+      '!{.env,.env.*,.npmrc,pnpm-lock.yaml}',
+      '!{tsconfig.json}',
+    ],
   asar: true,
   asarUnpack: [
     '**/*.node',
