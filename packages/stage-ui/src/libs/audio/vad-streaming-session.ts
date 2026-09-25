@@ -77,6 +77,22 @@ export function createVadStreamingSession<T = void>(options: VadStreamingSession
     }
   }
 
+  // Immediately invoke cancellation without waiting for the lifecycle queue.
+  // This aborts any in-flight provider start so subsequent queued cleanup can finish.
+  async function cancelImmediate(utterance: Utterance<T>) {
+    if (providerOwner !== utterance)
+      return
+      // If we're still in opening, the start() may be in-flight; cancel it now.
+    if (state.status === 'opening' && providerOwner === utterance) {
+      try {
+        await options.cancel()
+      }
+      catch (cause) {
+        reportError(cause)
+      }
+    }
+  }
+
   function onSpeechStart(segment: T) {
     if (isDisposed() || (current && !current.speechEnded))
       return
@@ -125,6 +141,8 @@ export function createVadStreamingSession<T = void>(options: VadStreamingSession
     const utterance = current
     utterance.speechEnded = true
     utterance.cancelled = true
+    // Immediately abort any in-flight provider start
+    void cancelImmediate(utterance)
     void enqueue(async () => await close(utterance))
   }
 
