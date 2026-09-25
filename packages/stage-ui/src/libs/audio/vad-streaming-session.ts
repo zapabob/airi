@@ -1,5 +1,5 @@
 export interface VadStreamingSessionOptions<T = void> {
-  start: (segment: T) => Promise<void>
+  start: (segment: T, signal: AbortSignal) => Promise<void>
   stop: () => Promise<void>
   cancel: () => Promise<void>
   onError?: (error: unknown) => void
@@ -19,6 +19,8 @@ interface Utterance<T> {
   segment: T
   speechEnded: boolean
   cancelled: boolean
+  cancellation?: Promise<void>
+  abortController: AbortController
 }
 
 /**
@@ -61,7 +63,7 @@ export function createVadStreamingSession<T = void>(options: VadStreamingSession
 
     try {
       if (utterance.cancelled)
-        await (disposalCancellation ?? options.cancel())
+        await (utterance.cancellation ?? disposalCancellation ?? options.cancel())
       else
         await options.stop()
       if (current === utterance && state.status !== 'disposed')
@@ -81,7 +83,13 @@ export function createVadStreamingSession<T = void>(options: VadStreamingSession
     if (isDisposed() || (current && !current.speechEnded))
       return
 
-    const utterance: Utterance<T> = { id: ++nextUtteranceId, segment, speechEnded: false, cancelled: false }
+    const utterance: Utterance<T> = {
+      id: ++nextUtteranceId,
+      segment,
+      speechEnded: false,
+      cancelled: false,
+      abortController: new AbortController(),
+    }
     current = utterance
     state = { status: 'opening', utteranceId: utterance.id }
     void enqueue(async () => {
@@ -89,7 +97,7 @@ export function createVadStreamingSession<T = void>(options: VadStreamingSession
         return
 
       try {
-        await options.start(utterance.segment)
+        await options.start(utterance.segment, utterance.abortController.signal)
         providerOwner = utterance
       }
       catch (cause) {
@@ -125,6 +133,9 @@ export function createVadStreamingSession<T = void>(options: VadStreamingSession
     const utterance = current
     utterance.speechEnded = true
     utterance.cancelled = true
+    utterance.abortController.abort(new DOMException('Cancelled', 'AbortError'))
+    // Do not queue cancellation behind an in-flight provider start.
+    utterance.cancellation = Promise.resolve().then(options.cancel).catch(reportError)
     void enqueue(async () => await close(utterance))
   }
 

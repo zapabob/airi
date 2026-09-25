@@ -918,14 +918,23 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
   async function startVadRealtimeTranscription(
     providerId: string,
     options: MediaStreamTranscriptionOptions,
-    vadSession: NonNullable<typeof streamingVadSession.value>,
     segment: VadSpeechSegment,
+    signal: AbortSignal,
   ) {
     const provider = await providersStore.getProviderInstance<TranscriptionProviderWithExtraOptions<string, any>>(providerId)
     if (!provider)
       throw new Error('Failed to initialize speech provider')
 
     const abortController = new AbortController()
+    const abortFromLifecycle = () => {
+      if (!abortController.signal.aborted)
+        abortController.abort(signal.reason)
+    }
+    if (signal.aborted)
+      abortFromLifecycle()
+    else
+      signal.addEventListener('abort', abortFromLifecycle, { once: true })
+
     const session: NonNullable<typeof streamingSession.value> = {
       audioStreamController: undefined as ReadableStreamDefaultController<Uint8Array> | undefined,
       abortController,
@@ -991,7 +1000,7 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
       },
     })
     const lifecycle = createVadStreamingSession<VadSpeechSegment>({
-      start: async segment => await startVadRealtimeTranscription(providerId, options, vadSession, segment),
+      start: async (segment, signal) => await startVadRealtimeTranscription(providerId, options, vadSession, segment, signal),
       stop: async () => {
         await finishRealtimeTranscription()
       },

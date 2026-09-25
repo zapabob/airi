@@ -73,6 +73,28 @@ describe('createVadStreamingSession', () => {
     expect(session.state.status).toBe('idle')
   })
 
+  it('cancels an in-flight provider start immediately and aborts its later-created transport', async () => {
+    let releaseStart!: () => void
+    let startSignal!: AbortSignal
+    const cancel = vi.fn(async () => {})
+    const start = vi.fn(async (_segment: void, signal: AbortSignal) => {
+      startSignal = signal
+      await new Promise<void>((resolve) => { releaseStart = resolve })
+      expect(signal.aborted).toBe(true)
+    })
+    const session = createVadStreamingSession<void>({ start, stop: async () => {}, cancel })
+
+    session.onSpeechStart()
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1))
+    session.onSpeechCancel()
+
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce())
+    expect(startSignal.aborted).toBe(true)
+
+    releaseStart()
+    await vi.waitFor(() => expect(session.state.status).toBe('idle'))
+  })
+
   it('stops a session when speech ends before its asynchronous start completes', async () => {
     let releaseStart!: () => void
     const start = vi.fn(async () => await new Promise<void>((resolve) => {
