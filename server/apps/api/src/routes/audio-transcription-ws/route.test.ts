@@ -35,6 +35,7 @@ function createHandlers(): WSEvents {
     configKV: { getOptional: vi.fn(async () => null) } as never,
     envelopeCrypto: {} as never,
     providerCatalogService: {} as never,
+    requestLogService: { logRequest: vi.fn(async () => undefined) } as never,
   })
   return setup('user-123')
 }
@@ -119,6 +120,7 @@ describe('audio transcription WebSocket route', () => {
       }) } as never,
       envelopeCrypto: {} as never,
       providerCatalogService: {} as never,
+      requestLogService: { logRequest: vi.fn(async () => undefined) } as never,
     })
     const events = setup('user-123')
     const client = createMockClient()

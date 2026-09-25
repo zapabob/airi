@@ -1,6 +1,9 @@
-import type { AudioTranscriptionClientControlMessage, AudioTranscriptionServerMessage } from '@proj-airi/server-sdk-shared'
+import type { AudioTranscriptionClientControlMessage } from '@proj-airi/server-sdk-shared'
 
 import type { AIRIStreamTranscriptionDelta, AIRIStreamTranscriptionResult, StreamTranscriptionOptions } from '../../stream-transcription'
+
+import { AudioTranscriptionServerMessageSchema } from '@proj-airi/server-sdk-shared'
+import { safeParse } from 'valibot'
 
 import { getAuthToken } from '../../../auth'
 
@@ -17,6 +20,16 @@ function resolveAudioStream(options: OfficialStreamTranscriptionOptions): Readab
   if (!stream)
     throw new TypeError('Audio stream or file is required for official transcription.')
   return stream as ReadableStream<AudioChunk>
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
 }
 
 function toWebSocketURL(baseURL: URL | string): string {
@@ -40,7 +53,7 @@ function toWebSocketURL(baseURL: URL | string): string {
 /** Streams one VAD speech segment through the official ASR WebSocket. */
 export function streamOfficialTranscription(options: OfficialStreamTranscriptionOptions): AIRIStreamTranscriptionResult {
   const audioStream = resolveAudioStream(options)
-  const deferredText = Promise.withResolvers<string>()
+  const deferredText = createDeferred<string>()
   void deferredText.promise.catch(() => {})
 
   let text = ''
@@ -152,14 +165,21 @@ export function streamOfficialTranscription(options: OfficialStreamTranscription
   function handleServerMessage(raw: string) {
     if (settled)
       return
-    let message: AudioTranscriptionServerMessage
+    let parsed: unknown
     try {
-      message = JSON.parse(raw) as AudioTranscriptionServerMessage
+      parsed = JSON.parse(raw)
     }
     catch {
       fail(new Error('Official ASR returned an invalid JSON frame.'))
       return
     }
+
+    const result = safeParse(AudioTranscriptionServerMessageSchema, parsed)
+    if (!result.success) {
+      fail(new Error('Official ASR returned an invalid frame.'))
+      return
+    }
+    const message = result.output
 
     switch (message.event) {
       case 'session.started':

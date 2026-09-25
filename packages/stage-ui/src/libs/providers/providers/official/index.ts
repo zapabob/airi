@@ -354,9 +354,10 @@ export const providerOfficialTranscription = defineProvider({
   createProviderConfig: () => officialConfigSchema,
   createProvider(_config) {
     return {
-      transcription: (model: string) => ({
+      transcription: (model: string, options?: { abortSignal?: AbortSignal }) => ({
         baseURL: new URL(`${SERVER_URL}/api/v1/audio/transcriptions/ws`),
         model,
+        abortSignal: options?.abortSignal,
       }),
     }
   },

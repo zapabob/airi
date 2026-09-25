@@ -30,7 +30,7 @@ describe('buildCreateTokenRequest', () => {
   const expectedSignature = 'X4/yeE8FUchC5Wv7AZJybEuDWzw='
   const expectedSignatureEncoded = encodeURIComponent(expectedSignature)
   const expectedSignedQuery = `Signature=${expectedSignatureEncoded}&${expectedCanonicalQuery}`
-  const expectedUrl = `http://nls-meta.cn-shanghai.aliyuncs.com/?${expectedSignedQuery}`
+  const expectedUrl = `https://nls-meta.cn-shanghai.aliyuncs.com/?${expectedSignedQuery}`
 
   it('builds canonical query string matching the Java implementation', () => {
     const canonical = canonicalizeQuery(testParameters)

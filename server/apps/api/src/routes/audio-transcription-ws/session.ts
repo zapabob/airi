@@ -8,12 +8,17 @@ import WebSocket from 'ws'
 
 import { merge } from '@moeru/std'
 import { ofetch } from 'ofetch'
-import { literal, number, object, optional, safeParse, string, union } from 'valibot'
+import { literal, number, object, optional, parse, safeParse, string, union } from 'valibot'
 
 interface AliyunNlsToken {
   token: string
   expiresAt: number
 }
+
+const AliyunNlsTokenResponseSchema = object({
+  Token: optional(object({ ExpireTime: optional(number()), Id: optional(string()) })),
+  Message: optional(string()),
+})
 
 interface AliyunNlsStartPayload {
   format?: 'pcm' | 'wav' | 'opus' | 'speex' | 'amr' | 'mp3' | 'aac'
@@ -131,15 +136,14 @@ async function createAliyunNlsToken(credentials: AliyunNlsCredentials): Promise<
   const canonicalQuery = canonicalizeQuery(params)
   const signature = encodeURIComponent(signStringToBase64('POST', '/', canonicalQuery, credentials.accessKeySecret))
   const endpoint = nlsMetaEndpointFromRegion(credentials.region).toString().replace(/\/$/, '')
-  const response = await ofetch<{
-    Token?: { ExpireTime?: number, Id?: string }
-    Message?: string
-  }>(`${endpoint}/?Signature=${signature}&${canonicalQuery}`, { method: 'POST', timeout: 10000 })
+  const response = await ofetch<unknown>(`${endpoint}/?Signature=${signature}&${canonicalQuery}`, { method: 'POST', timeout: 10000 })
+  const parsed = safeParse(AliyunNlsTokenResponseSchema, response)
 
-  if (typeof response.Token?.Id === 'string' && typeof response.Token?.ExpireTime === 'number')
-    return { token: response.Token.Id, expiresAt: response.Token.ExpireTime * 1000 }
+  if (parsed.success && typeof parsed.output.Token?.Id === 'string' && typeof parsed.output.Token.ExpireTime === 'number')
+    return { token: parsed.output.Token.Id, expiresAt: parsed.output.Token.ExpireTime * 1000 }
 
-  throw new Error(`Aliyun NLS token request failed: ${response.Message || 'unknown error'}`)
+  const message = parsed.success && parsed.output.Message ? parsed.output.Message : 'malformed response'
+  throw new Error(`Aliyun NLS token request failed: ${message}`)
 }
 
 function createClientEvent(credentials: AliyunNlsCredentials, name: 'StartTranscription' | 'StopTranscription', sessionId: string, payload?: AliyunNlsStartPayload) {

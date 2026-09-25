@@ -3,6 +3,7 @@ import type { WSContext, WSEvents } from 'hono/ws'
 
 import type { ConfigKVService } from '../../services/adapters/config-kv'
 import type { ProviderCatalogService } from '../../services/domain/provider-catalog'
+import type { RequestLogService } from '../../services/domain/request-log'
 import type { EnvelopeCrypto } from '../../utils/envelope-crypto'
 import type { AliyunNlsSession } from './session'
 
@@ -64,6 +65,7 @@ export function createAudioTranscriptionWsHandlers(options: {
   configKV: ConfigKVService
   envelopeCrypto: EnvelopeCrypto
   providerCatalogService: ProviderCatalogService
+  requestLogService: RequestLogService
 }) {
   return function setupPeer(userId: string): WSEvents {
     let client: WSContext | undefined
@@ -73,6 +75,7 @@ export function createAudioTranscriptionWsHandlers(options: {
     let sessionTimer: ReturnType<typeof setTimeout> | undefined
     let usageRecorded = false
     const requestId = randomUUID()
+    const startedAt = Date.now()
 
     function recordUsage(outcome: 'completed' | 'cancelled' | 'disconnected' | 'failed') {
       if (usageRecorded)
@@ -87,6 +90,13 @@ export function createAudioTranscriptionWsHandlers(options: {
         audioBytes: totalAudioBytes,
         audioDurationMs: Math.ceil(totalAudioBytes / 32),
       }).log('ASR usage recorded')
+      void options.requestLogService.logRequest({
+        userId,
+        model: 'official-asr',
+        status: outcome === 'completed' ? 200 : 499,
+        durationMs: Date.now() - startedAt,
+        fluxConsumed: 0,
+      }).catch(error => log.withError(error).warn('Failed to write ASR request log'))
     }
 
     function clearSessionTimer() {

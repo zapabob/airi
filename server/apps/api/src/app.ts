@@ -263,6 +263,7 @@ export async function buildApp(deps: AppDeps) {
     configKV: deps.configKV,
     envelopeCrypto: deps.envelopeCrypto,
     providerCatalogService: deps.providerCatalogService,
+    requestLogService: deps.requestLogService,
   })
   app.get('/api/v1/audio/transcriptions/ws', upgradeWebSocket(async (c) => {
     const protocols = c.req.header('sec-websocket-protocol')?.split(',').map(protocol => protocol.trim())
