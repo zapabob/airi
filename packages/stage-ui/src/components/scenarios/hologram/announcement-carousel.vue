@@ -15,7 +15,9 @@ const props = withDefaults(defineProps<{
   mobile?: boolean
   /** Keyboard-opened panels stay on the selected announcement until closed. @default false */
   paused?: boolean
-}>(), { mobile: false, paused: false })
+  /** The surrounding popover has focus, including its close button. @default false */
+  panelFocused?: boolean
+}>(), { mobile: false, paused: false, panelFocused: false })
 const { locale, t } = useI18n()
 const { titleClass, descriptionClass, metaClass } = usePromoBannerLayout(locale)
 // The parent retains the selected ID while the panel is closed. Its position is
@@ -26,6 +28,7 @@ const failedCovers = ref(new Set<string>())
 const [_emblaRef, emblaApi] = useEmblaCarousel({ loop: true, slideChanges: false })
 // Touch readers cannot keep hover active while reading or scrolling.
 const canAutoplay = useMediaQuery('(hover: hover) and (pointer: fine)')
+const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
 const hovered = ref(false)
 const focused = ref(false)
 let autoplayTimer: ReturnType<typeof setInterval> | undefined
@@ -47,7 +50,7 @@ function stopAutoplay() {
 
 // Expiry updates the announcement list each second. Watch the playback decision
 // so those updates do not restart the five-second timer.
-const autoplayEnabled = computed(() => canAutoplay.value && !props.paused && !props.mobile && !hovered.value && !focused.value
+const autoplayEnabled = computed(() => canAutoplay.value && !reducedMotion.value && !props.paused && !props.mobile && !hovered.value && !focused.value
   && !!emblaApi.value && props.items.length > 1)
 watch(autoplayEnabled, (enabled) => {
   stopAutoplay()
@@ -89,6 +92,7 @@ onBeforeUnmount(stopAutoplay)
 <template>
   <div
     :class="['overflow-hidden rounded-3xl text-white']"
+    :data-panel-focused="props.panelFocused"
     @mouseenter="hovered = true"
     @mouseleave="hovered = false"
     @click="focused = $event.detail === 0"
@@ -170,9 +174,11 @@ onBeforeUnmount(stopAutoplay)
 /* Only the selected mobile slide determines the panel height. Offscreen slides
    keep their width for Embla navigation without leaving blank space below it. */
 .announcement-slide[data-mobile='true'][aria-hidden='true'] {
+  /* Keep Embla's incoming slide paintable during a drag without letting it
+     contribute to the carousel viewport's measured height. */
   height: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Touch devices show text without hover. Keyboard focus reveals the same overlay
@@ -183,4 +189,8 @@ onBeforeUnmount(stopAutoplay)
     pointer-events: none;
   }
 }
+  [data-panel-focused='true'] .announcement-slide[data-layout='landscape'][data-cover='true'][data-mobile='false'] .announcement-text {
+    opacity: 1;
+    pointer-events: auto;
+  }
 </style>

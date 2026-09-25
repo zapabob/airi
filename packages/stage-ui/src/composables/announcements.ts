@@ -39,12 +39,13 @@ export function useAnnouncements(client: MaybeRefOrGetter<'web' | 'desktop'>, lo
     controller?.abort()
     const request = new AbortController()
     controller = request
+    const timeout = setTimeout(() => request.abort(), 10000)
     try {
       const { data } = await announcementServiceListAnnouncements({
         baseUrl,
         query: { client: toValue(client), locale: toValue(locale), limit: 100 },
         credentials: 'omit',
-        signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
+        signal: request.signal,
         throwOnError: true,
       })
       if (disposed || request.signal.aborted)
@@ -59,6 +60,9 @@ export function useAnnouncements(client: MaybeRefOrGetter<'web' | 'desktop'>, lo
       // state cannot be checked; keep the error available for diagnostics.
       entries.value = []
       error.value = caught
+    }
+    finally {
+      clearTimeout(timeout)
     }
   }
 

@@ -21,7 +21,18 @@ const open = defineModel<boolean>('open', { default: false })
 const selectedId = ref('')
 // Keep a keyboard-opened reading session paused, including focus on the close button.
 const keyboardOpened = ref(false)
+const panelFocused = ref(false)
 const triggerElement = ref<HTMLDivElement>()
+
+function updatePanelFocus(event: FocusEvent) {
+  const currentTarget = event.currentTarget
+  const relatedTarget = event.relatedTarget
+  panelFocused.value = currentTarget instanceof Element
+    && relatedTarget instanceof Node
+    && currentTarget.contains(relatedTarget)
+    ? true
+    : event.type === 'focusin'
+}
 
 // Electron tracks the floating trigger with native cursor coordinates and keeps
 // input active while its portaled popover is open. The mobile header owns its trigger.
@@ -38,6 +49,7 @@ watch(announcements, (items) => {
   <Teleport v-if="announcements.length" to="body" :disabled="presentation === 'header'">
     <div
       ref="triggerElement"
+      data-ambient-light-opaque
       :class="presentation === 'header' ? ['pointer-events-auto inline-flex'] : ['fixed bottom-10 z-50 pointer-events-auto', triggerSide === 'left' ? 'left-6' : 'right-6']"
     >
       <PopoverRoot v-model:open="open">
@@ -61,6 +73,8 @@ watch(announcements, (items) => {
         </PopoverTrigger>
         <PopoverPortal>
           <PopoverContent
+            @focusin="updatePanelFocus"
+            @focusout="updatePanelFocus"
             :side="presentation === 'header' ? 'bottom' : 'top'"
             :align="presentation === 'header' || triggerSide === 'right' ? 'end' : 'start'" :side-offset="12"
             :aria-label="t('stage.announcements.title')"
@@ -83,7 +97,7 @@ watch(announcements, (items) => {
               </button>
             </PopoverClose>
             <div :class="['announcement-content max-h-[var(--reka-popover-content-available-height)] overflow-y-auto rounded-3xl']">
-              <AnnouncementCarousel v-model:selected-id="selectedId" :items="announcements" :mobile="presentation === 'header'" :paused="keyboardOpened" />
+              <AnnouncementCarousel v-model:selected-id="selectedId" :items="announcements" :mobile="presentation === 'header'" :paused="keyboardOpened" :panel-focused="panelFocused" />
             </div>
           </PopoverContent>
         </PopoverPortal>
