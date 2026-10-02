@@ -20,6 +20,12 @@ export const useDiscordStore = defineStore('discord', () => {
     connected.value = event.data.phase === 'ready'
   })
 
+  modsChannel.onEvent('extension:module:de-announced', (event) => {
+    if (event.data.identity.id === 'discord') {
+      connected.value = false
+    }
+  })
+
   function saveSettings() {
     connected.value = false
     // Data is automatically saved to localStorage via useLocalStorage

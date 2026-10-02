@@ -232,6 +232,17 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
   // AIRI authentication, registry sync, route policy, and extension events.
   const peers = new Map<string, AuthenticatedPeer>()
   const peersByModule = new Map<string, Map<number | string | undefined, AuthenticatedPeer>>()
+  const moduleStatusEvents = new Map<string, WebSocketEvent<Record<string, unknown>>>()
+
+  function replayModuleStatuses(peer: Peer, parentId?: string) {
+    for (const event of moduleStatusEvents.values()) {
+      send(peer, {
+        ...event,
+        metadata: createEventMetadata(instanceId, parentId),
+      })
+    }
+  }
+
   const consumers = createConsumerOrchestrator()
   const heartbeatTtlMs = options?.heartbeat?.readTimeout ?? serverWsDefaultHeartbeatTtlMs
   const heartbeatMessage = options?.heartbeat?.message ?? MessageHeartbeat.Pong
@@ -392,6 +403,10 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
     if (!peerInfo.name)
       return
 
+    if (peerInfo.identity) {
+      moduleStatusEvents.delete(peerInfo.identity.id)
+    }
+
     const group = peersByModule.get(peerInfo.name)
     if (group) {
       group.delete(peerInfo.index)
@@ -431,6 +446,7 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
     }
 
     peerInfo.extensionModules?.delete(module.identity.id)
+    moduleStatusEvents.delete(module.identity.id)
     broadcastToAuthenticated({
       type: 'extension:module:de-announced',
       data: { name: module.name, identity: module.identity, possibleEvents: [], reason },
@@ -517,6 +533,14 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
     }
   }
 
+  function broadcastModuleStatus(event: WebSocketEvent<Record<string, unknown>>) {
+    const identity = (event.data as { identity?: { id?: string } }).identity
+    if (identity?.id) {
+      moduleStatusEvents.set(identity.id, event)
+    }
+    broadcastToAuthenticated(event)
+  }
+
   // === WebSocket Server Handlers ===
   // Handles AIRI peer lifecycle: open, message, error, close.
   const wsServer = createWsServer<AiriWsMessage, AiriWsPeerState>({
@@ -541,6 +565,7 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
       send(peer, RESPONSES.authenticated())
       peers.set(peer.id, { peer, authenticated: true, name: '', lastHeartbeatAt: Date.now() })
       sendRegistrySync(peer)
+      replayModuleStatuses(peer)
     }
 
     logger.withFields({ peer: peer.id, activePeers: peers.size }).log('connected')
@@ -633,6 +658,7 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
         }
 
         sendRegistrySync(peer, event.metadata?.event.id)
+        replayModuleStatuses(peer, event.metadata?.event.id)
 
         return
       }
@@ -657,6 +683,7 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
         }
 
         sendRegistrySync(peer, event.metadata?.event.id)
+        replayModuleStatuses(peer, event.metadata?.event.id)
 
         return
       }
@@ -678,6 +705,7 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
 
         send(peer, RESPONSES.extensionAuthenticated(event.data.identity, event.metadata?.event.id))
         sendRegistrySync(peer, event.metadata?.event.id)
+        replayModuleStatuses(peer, event.metadata?.event.id)
 
         return
       }
@@ -928,6 +956,11 @@ export function setupApp(options?: AppOptions): { app: H3, closeAllPeers: () => 
 
         removeFailedPeer(selectedConsumer, 'consumer send failed')
       }
+      return
+    }
+
+    if (event.type === 'module:status') {
+      broadcastModuleStatus(event as WebSocketEvent<Record<string, unknown>>)
       return
     }
 
