@@ -118,10 +118,5 @@
   },
   "nano-staged": {
     "*": "moeru-lint --fix"
-  },
-  "pnpm": {
-    "overrides": {
-      "gh-pages": "5.0.0"
-    }
   }
 }
