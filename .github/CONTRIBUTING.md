@@ -186,17 +186,7 @@ Browse the live UI component storyboard at [airi.moeru.ai/ui](https://airi.moeru
 
 ### Documentation site
 
-```shell
-pnpm dev:docs
-```
-
-> [!NOTE]
->
-> For [@antfu/ni](https://github.com/antfu-collective/ni) users, you can
->
-> ```shell
-> nr dev:docs
-> ```
+The documentation site lives in [moeru-ai/airi-docs](https://github.com/moeru-ai/airi-docs), see its README for development.
 
 ### Telegram bot integration
 
@@ -338,6 +328,24 @@ You should be able to browse the branch on your fork repository.
 Navigate to [moeru-ai/airi](https://github.com/moeru-ai/airi) page, click on the **Pull requests** tab, and click on the **New pull request** button, click on the **Compare across forks** link, and select your fork repository.
 
 Review the changes, and click on the **Create pull request** button.
+
+## Unit Test merge requirement
+
+The `Unit Test` check must pass before a pull request merges into `main`.
+Organization member `luoling8192` described failed unit tests as a CI blocker in
+[PR #2290](https://github.com/moeru-ai/airi/pull/2290#issuecomment-5802515112) and
+[PR #2214](https://github.com/moeru-ai/airi/pull/2214#issuecomment-5802515813).
+
+The proposed [Require Unit Test ruleset](rulesets/require-unit-test.json) adds this requirement alongside the existing `Protect main` ruleset.
+It requires the `Unit Test` check from GitHub Actions and has no bypass actors.
+Existing required checks remain in effect.
+
+A repository administrator must import the JSON file under **Settings → Rules → Rulesets → New ruleset → Import a ruleset**.
+Do not create a duplicate if `Require Unit Test` already exists. Update that ruleset instead.
+Merging this document does not apply the GitHub configuration.
+
+Auto-merge is already enabled for the repository.
+With this ruleset active, auto-merge waits for `Unit Test` and the other required checks before a merge.
 
 ## Whooo-ya! You made it!
 

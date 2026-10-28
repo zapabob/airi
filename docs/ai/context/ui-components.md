@@ -73,11 +73,46 @@ Expandable/collapsible container with trigger button and vertical animation.
 **v-model**: `visible: boolean`
 **Slots**: `trigger({ visible, setVisible })`, `default({ visible, setVisible })`
 
+### LinkGroup
+
+Card that groups `LinkGroupItem` links under a small title, such as the settings search results of one category.
+It has the surface and the dot texture of the settings category cards, and its icon shows large and faded in the bottom-right corner.
+When an item has hover or focus, the icon scales up.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `title` | `string?` | — | Name of the group, shown small in the top-left corner |
+| `icon` | `string?` | — | Iconify class. It shows next to the title, and large in the corner |
+
+**Slots**: `default` (the `LinkGroupItem` links)
+**Exposes**: `naturalWidth()`, the narrowest width at which no item cuts its text. A layout can use it to decide how many groups fit side by side.
+
+### LinkGroupItem
+
+One link in a `LinkGroup`: a name on the left, a short detail on the right, and an arrow.
+On hover, the theme color sweeps in from the left and the dots under the item light up.
+The name keeps its width. The detail shrinks and cuts first.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `as` | `PrimitiveProps['as']?` | `'a'` | Element or component to render, such as `RouterLink`. Other attributes, such as `to`, pass to it |
+| `detail` | `string?` | — | Short note on the right, such as where the link goes |
+
+**Slots**: `default` (the name), `detail` (replaces the `detail` prop)
+
 ### Screen
 
 Responsive screen component that calculates canvas dimensions based on breakpoints.
 
 **Props**: None | **Slots**: `default({ width, height })`
+
+### SettingsCard
+
+Card container for module settings pages. It owns the width, radius, padding,
+stack gap, and background for both themes. Use it for a new module settings page
+instead of repeating the card classes inline.
+
+**Props**: None | **Slots**: `default`
 
 ### ScrollableArea
 
@@ -127,6 +162,7 @@ starts only on the handle, so action buttons and scrolling do not dismiss it.
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `title` | `string` | required | Visible and accessible title |
+| `hideTitle` | `boolean` | `false` | Hides the heading visually and preserves the accessible dialog name |
 | `minimumHeight` | `'content' \| 'half'` | `'content'` | Uses content height or at least half of the viewport height |
 
 Dismiss with the handle, overlay, or Escape. There is no close button.
@@ -137,6 +173,7 @@ Dismiss with the handle, overlay, or Escape. There is no close button.
 
 **Emits**: `afterClose()` after the dismissal animation;
 `closeAutoFocus(event)` to prevent focus restoration when another modal opens.
+`openAutoFocus(event)` lets the consumer set the initial focus target.
 
 Use for mobile action menus and settings panels. Desktop dialogs and panels
 that need snap points use their own surface.
@@ -154,6 +191,17 @@ renders the fallback when the URL is missing, loading, or fails.
 | `crossOrigin` | `ImgHTMLAttributes['crossorigin']?` | — | Image cross-origin mode |
 
 **Slots**: `fallback` (optional override for the built-in user icon)
+
+### Badge
+
+Small unread marker in the theme `primary` color, so it follows the hue that the user selects. A count badge caps at `max+`, so its width never grows past three characters. A dot badge has a fixed size and no number.
+Put dots on triggers, such as icon buttons, avatars, and menu buttons. Put counts inside menus and panel headers. The badge is `aria-hidden`, so the owning control must name the count.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `count` | `number?` | `0` | Number to show; zero or less renders nothing unless `dot` is set |
+| `max` | `number?` | `99` | Counts above it render as `99+` |
+| `dot` | `boolean?` | `false` | Render a fixed-size dot instead of a number |
 
 ### BasicButton
 
@@ -257,6 +305,25 @@ Catches synchronous render/setup errors in descendants via `onErrorCaptured` and
 **Slots**: `default`, `fallback({ error, info, retry })`
 **Emits**: `error(err, instance, info)`, `retry()`
 **Exposed**: `retry()`, `hasError()`
+
+### DropdownMenu
+
+Shared dropdown-menu surface built on Reka UI. It owns the root, trigger,
+portal, content surface, and `AnimatedContent` lifecycle. Callers own the menu
+items and their business actions.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `align` | `DropdownMenuContentProps['align']?` | `'start'` | Preferred content alignment before collision handling |
+| `contentClass` | `string \| string[]?` | — | Additional classes for the content surface |
+| `disabled` | `boolean?` | `false` | Disables the trigger |
+| `modal` | `boolean?` | `true` | A non-modal menu leaves the rest of the page interactive while it is open |
+| `side` | `DropdownMenuContentProps['side']?` | `'bottom'` | Preferred content side before collision handling |
+| `sideOffset` | `number?` | `6` | Offset between the trigger and content |
+| `variant` | `'blurry' \| 'default'?` | `'default'` | Selects a translucent or opaque content surface |
+
+**Models**: `open` (`boolean`, default `false`). Bind it to open the menu from code, for example after a hover delay.
+**Slots**: `trigger` (one interactive element), `default` (Reka dropdown-menu items).
 
 ### DoubleCheckButton
 

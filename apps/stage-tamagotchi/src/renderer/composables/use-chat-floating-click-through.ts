@@ -84,6 +84,9 @@ export async function dismissOverlays() {
  * - A pointer pressed in the window is still held, so a drag of the
  *   scrollbar, a text selection or a resize keeps going off the painted area.
  * - A dialog or menu is open.
+ * - The element under the cursor or one of its ancestors has
+ *   `data-takes-pointer`. A resize handle along the edge paints nothing, and
+ *   a press must still reach it when no glass paints behind it.
  * - The page paints something under the cursor.
  * - The page painted under the cursor, and the hand has not pressed or moved
  *   more than {@link handJitter} on the screen since.
@@ -100,7 +103,8 @@ export async function dismissOverlays() {
  *
  * The page can also change under a cursor that stays still. A dialog or menu
  * that opens or closes runs the hit test again, and so does the returned
- * `hitTest`, which the page calls once the chat has unfolded.
+ * `hitTest`, which the page calls once the chat has unfolded, or with
+ * `removed` after it removed what the cursor was over.
  */
 export function useChatFloatingClickThrough(options: {
   /** Whether the chat window stays above other windows. */
@@ -160,6 +164,9 @@ export function useChatFloatingClickThrough(options: {
     if (document.querySelector(openOverlaySelector))
       return true
 
+    if (target?.closest('[data-takes-pointer]'))
+      return true
+
     if (inPassiveArea) {
       paintedAt = undefined
       return false
@@ -180,7 +187,16 @@ export function useChatFloatingClickThrough(options: {
   // `undefined` until the first hit test, so a reloaded renderer does not
   // inherit the previous page's state.
   let appliedTakesPointer: boolean | undefined
-  function hitTest() {
+  /**
+   * Runs the hit test for the current cursor.
+   *
+   * `removed` tells that the page removed the content under the cursor, for example a card that finished its leave
+   * transition. The still-hand rule then does not apply: nothing that the hand pointed at remains, so the window
+   * passes clicks through at once instead of after the next hand movement.
+   */
+  function hitTest(options: { removed?: boolean } = {}) {
+    if (options.removed)
+      paintedAt = undefined
     const next = takesPointer()
     if (next === appliedTakesPointer)
       return
@@ -201,8 +217,8 @@ export function useChatFloatingClickThrough(options: {
   }, { immediate: true })
 
   // Dialogs and menus mount straight into the body.
-  useMutationObserver(document.body, hitTest, { childList: true })
-  watch([() => toValue(options.pinned), () => toValue(options.passiveArea), pointerHeld, x, y], hitTest, { immediate: true })
+  useMutationObserver(document.body, () => hitTest(), { childList: true })
+  watch([() => toValue(options.pinned), () => toValue(options.passiveArea), pointerHeld, x, y], () => hitTest(), { immediate: true })
 
   return { hitTest }
 }

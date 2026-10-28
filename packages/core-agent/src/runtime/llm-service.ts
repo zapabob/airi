@@ -3,12 +3,66 @@ import type { Usage } from '@xsai/shared-chat'
 import type { AssistantTurn, GenerationRound } from '../messages/types'
 import type { StreamEvent, StreamFromOptions, StreamOptions } from '../types/llm'
 
+import { APICallError } from '@xsai/shared'
+
 import { streamChatCompletions } from './chat-completions'
 import { createContinuationScope, supportsContentArray, supportsTools } from './request-context'
 import { RequestSwitch } from './request-switch'
 import { streamResponses } from './responses'
 
 export { modelKey } from './request-context'
+
+/**
+ * Automatic retry for provider requests that fail with a temporary HTTP status
+ * before any stream event reaches the consumer.
+ */
+const transientRetry = {
+  /** Wait before each retry when the provider sends no usable `Retry-After`; its length caps the retry count. */
+  backoffMs: [3_000, 6_000, 12_000],
+  /** Longest server-requested `Retry-After` to wait silently; a longer one fails the turn so the user decides. */
+  maxRetryAfterMs: 30_000,
+}
+
+/** Returns the wait before the next attempt, or `undefined` when the failure is permanent or retries are spent. */
+function transientRetryDelayMs(error: unknown, attempt: number): number | undefined {
+  if (attempt >= transientRetry.backoffMs.length || !(error instanceof APICallError))
+    return undefined
+  // Timeout, rate limit, and server-side failures can succeed later. Other
+  // 4xx statuses (auth, validation, unknown model) fail the same way again.
+  if (error.statusCode !== 408 && error.statusCode !== 429 && error.statusCode < 500)
+    return undefined
+
+  // NOTICE:
+  // Browsers hide `Retry-After` from cross-origin responses unless the provider
+  // lists it in `Access-Control-Expose-Headers`, so the backoff is the common path.
+  const retryAfter = error.responseHeaders['retry-after']
+  if (!retryAfter)
+    return transientRetry.backoffMs[attempt]
+  // `Retry-After` is either delay seconds or an HTTP date.
+  const seconds = Number(retryAfter)
+  const delayMs = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now()
+  if (Number.isNaN(delayMs))
+    return transientRetry.backoffMs[attempt]
+  return delayMs <= transientRetry.maxRetryAfterMs ? Math.max(delayMs, 0) : undefined
+}
+
+function waitBeforeRetry(delayMs: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason)
+      return
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, delayMs)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    function onAbort() {
+      clearTimeout(timer)
+      reject(signal?.reason)
+    }
+  })
+}
 
 async function resolveTools(options?: StreamOptions) {
   const tools = typeof options?.tools === 'function'
@@ -30,8 +84,18 @@ async function streamOnce({
   const currentProvider = initialStep?.chatProvider ?? chatProvider
   // Resolve before async tool loading so all decisions use this request's configuration.
   const request = currentProvider.generation(currentModel)
+  if (options?.prepareConversation) {
+    conversation = await options.prepareConversation(conversation, {
+      model: currentModel,
+      providerId: initialStep?.providerId ?? options.providerId,
+      request,
+    })
+  }
   const supportedTools = supportsTools(currentModel, request, options)
   const contentArraySupported = supportsContentArray(currentModel, request, options)
+  if (request.protocol === 'chat-completions' && !contentArraySupported && options?.prepareStringContent)
+    conversation = await options.prepareStringContent(conversation)
+  options?.abortSignal?.throwIfAborted()
   const builtinTools = supportedTools && !initialStep
     ? await (builtinToolsResolver?.(model, chatProvider) ?? Promise.resolve([]))
     : []
@@ -58,6 +122,10 @@ async function streamOnce({
       settled = true
       reject(error)
     }
+    // A request switch retries the request, and a caller abort is a cancellation that the caller already knows about.
+    // Logging either one as a failure fills the console during normal speech, for example when a voice plugin
+    // cancels a judgement because the speaker continued.
+    const reportsFailure = (error: unknown) => !(error instanceof RequestSwitch) && !options?.abortSignal?.aborted
 
     const onEvent = async (streamEvent: StreamEvent) => {
       try {
@@ -75,7 +143,7 @@ async function streamOnce({
 
     try {
       const streamResult = request.protocol === 'responses'
-        ? streamResponses({ config: request.config, webSearch: supportedTools && request.webSearch, conversation, scope, options, tools, initialStep, onEvent })
+        ? streamResponses({ config: request.config, webSearch: supportedTools && options?.providerTools !== false && request.webSearch, conversation, scope, options, tools, initialStep, onEvent })
         : streamChatCompletions({ config: request.config, conversation, scope, options, tools, initialStep, onEvent, supportsContentArray: contentArraySupported })
 
       // NOTICE:
@@ -134,24 +202,24 @@ async function streamOnce({
           return
         }
         rejectOnce(error)
-        if (!(error instanceof RequestSwitch))
+        if (reportsFailure(error))
           console.error('Stream steps error:', error)
       })
       // `steps` can reject before the success path awaits `messages`.
       // Keep this rejection sink so xsAI cannot create an unhandled rejection.
       void streamResult.generatedTurn.catch((error) => {
-        if (!(error instanceof RequestSwitch))
+        if (reportsFailure(error))
           console.error('Stream generated turn error:', error)
       })
       void streamResult.usage.catch((error) => {
-        if (!(error instanceof RequestSwitch))
+        if (reportsFailure(error))
           console.error('Stream usage error:', error)
       })
       // `steps` and `totalUsage` reject independently when xsAI fails a
       // stream. The success path awaits `totalUsage`, but if `steps` rejects
       // first that await never runs, so keep this unconditional rejection sink.
       void streamResult.totalUsage.catch((error) => {
-        if (!(error instanceof RequestSwitch))
+        if (reportsFailure(error))
           console.error('Stream totalUsage error:', error)
       })
     }
@@ -159,6 +227,39 @@ async function streamOnce({
       rejectOnce(error)
     }
   })
+}
+
+/**
+ * Runs one request and repeats it while the provider reports temporary unavailability.
+ *
+ * Retrying is only safe while the consumer has seen no stream event. After the
+ * first event, text may already be rendered or spoken and tools may already have
+ * run, so a repeat would duplicate them; those failures surface for manual Retry.
+ * Cancelling through `abortSignal` also ends a pending retry wait.
+ */
+async function streamWithTransientRetry(input: StreamFromOptions) {
+  for (let attempt = 0; ; attempt++) {
+    let consumerNotified = false
+    try {
+      return await streamOnce({
+        ...input,
+        options: {
+          ...input.options,
+          onStreamEvent: (event) => {
+            consumerNotified = true
+            return input.options?.onStreamEvent?.(event)
+          },
+        },
+      })
+    }
+    catch (error) {
+      const delayMs = consumerNotified ? undefined : transientRetryDelayMs(error, attempt)
+      if (delayMs == null)
+        throw error
+      console.warn(`[llm] Retrying provider request in ${delayMs}ms (retry ${attempt + 1}/${transientRetry.backoffMs.length}):`, error)
+      await waitBeforeRetry(delayMs, input.options?.abortSignal)
+    }
+  }
 }
 
 function mergeGenerationUsage(rounds: GenerationRound[], last?: Parameters<NonNullable<StreamOptions['onUsage']>>[0]) {
@@ -177,17 +278,16 @@ function mergeGenerationUsage(rounds: GenerationRound[], last?: Parameters<NonNu
 /** Keeps one assistant turn across xsAI tool loops when the next request changes provider scope. */
 export async function streamFrom(input: StreamFromOptions): Promise<void> {
   if (!input.options?.resolveStep)
-    return streamOnce(input)
+    return streamWithTransientRetry(input)
 
   const completedRounds: GenerationRound[] = []
   let turnId = input.options.requestCorrelation?.turnId
   let request = input
-  let switches = 0
   while (true) {
     let finalTurn: AssistantTurn | undefined
     let lastUsage: Parameters<NonNullable<StreamOptions['onUsage']>>[0] | undefined
     try {
-      await streamOnce({
+      await streamWithTransientRetry({
         ...request,
         options: {
           ...request.options,
@@ -207,13 +307,8 @@ export async function streamFrom(input: StreamFromOptions): Promise<void> {
     catch (error) {
       if (!(error instanceof RequestSwitch))
         throw error
-      switches += 1
-      if (switches > 10)
-        throw new Error('Generation request scope changed too many times')
       turnId = error.partialTurn.id
       completedRounds.push(...error.partialTurn.rounds)
-      if (completedRounds.length >= 10)
-        throw new Error('Generation tool step limit reached')
       request = {
         ...input,
         model: error.next.model,
@@ -231,15 +326,14 @@ export async function streamFrom(input: StreamFromOptions): Promise<void> {
 }
 
 // Runtime auto-degrade: patterns that indicate the model/provider does not support tool calling.
+// An error about one tool is not in this list. An invalid schema or a failed tool call
+// (`invalid_function_parameters`, `tool_use_failed`) does not show that the model has no tool support.
 const TOOLS_RELATED_ERROR_PATTERNS: RegExp[] = [
   /does not support tools/i, // Ollama
   /no endpoints found that support tool use/i, // OpenRouter
-  /invalid schema for function/i, // OpenAI-compatible
-  /invalid.?function.?parameters/i, // OpenAI-compatible
   /functions are not supported/i, // Azure AI Foundry
   /unrecognized request argument.+tools/i, // Azure AI Foundry
   /tool use with function calling is unsupported/i, // Google Generative AI
-  /tool_use_failed/i, // Groq
   /does not support function.?calling/i, // Anthropic
   /tools?\s+(is|are)\s+not\s+supported/i, // Cloudflare Workers AI
 ]

@@ -7,6 +7,7 @@ import { computed, ref, watch } from 'vue'
 
 import {
   GAP_WARN_THRESHOLD_MS,
+  INPUT_SUBSYSTEMS,
   LABEL_COL_WIDTH,
   MINIMAP_HEIGHT,
   ROW_HEIGHT,
@@ -59,7 +60,7 @@ const globalRange = computed(() => {
   let max = -Infinity
   for (const { span } of visibleSpans.value) {
     min = Math.min(min, span.startTs)
-    max = Math.max(max, span.endTs ?? performance.now())
+    max = Math.max(max, span.endTs ?? Date.now())
   }
   if (min === Infinity)
     return { min: props.timeOrigin, max: props.timeOrigin + 1000 }
@@ -147,9 +148,10 @@ const layout = computed(() => {
     }
     isFirstTurn = false
 
+    const inputSpans = turnSpans.filter(s => INPUT_SUBSYSTEMS.has(s.subsystem)).sort((a, b) => a.startTs - b.startTs)
     const llmSpans = turnSpans.filter(s => s.subsystem === IOSubsystems.LLM).sort((a, b) => a.startTs - b.startTs)
     const auxiliarySpans = turnSpans
-      .filter(s => s.subsystem !== IOSubsystems.LLM && !ttsSubsystems.has(s.subsystem))
+      .filter(s => s.subsystem !== IOSubsystems.LLM && !ttsSubsystems.has(s.subsystem) && !INPUT_SUBSYSTEMS.has(s.subsystem))
       .sort((a, b) => a.startTs - b.startTs)
     const ttsSpanList = turnSpans.filter(s => ttsSubsystems.has(s.subsystem))
 
@@ -168,6 +170,11 @@ const layout = computed(() => {
 
     const sortedSegments = [...segmentGroups.values()]
       .sort((a, b) => a[0].startTs - b[0].startTs)
+
+    for (const span of inputSpans) {
+      rows.push({ type: 'span', span, turn, subsystem: span.subsystem, y })
+      y += ROW_HEIGHT
+    }
 
     for (const span of llmSpans) {
       rows.push({ type: 'span', span, turn, subsystem: IOSubsystems.LLM, y })
@@ -207,7 +214,7 @@ function spanBarX(span: IOSpan): number {
 }
 
 function spanBarWidth(span: IOSpan): number {
-  const end = span.endTs ?? performance.now()
+  const end = span.endTs ?? Date.now()
   const x1 = timeToX(span.startTs)
   const x2 = timeToX(end)
   return Math.max(x2 - x1, 3)
@@ -218,7 +225,7 @@ function isClippedLeft(span: IOSpan): boolean {
 }
 
 function isClippedRight(span: IOSpan): boolean {
-  const end = span.endTs ?? performance.now()
+  const end = span.endTs ?? Date.now()
   return timeToX(end) > chartWidth.value && timeToX(span.startTs) < chartWidth.value
 }
 
@@ -238,7 +245,7 @@ const edgeIndicators = computed(() => {
     if (row.type !== 'span')
       continue
     const span = row.span
-    const spanEnd = span.endTs ?? performance.now()
+    const spanEnd = span.endTs ?? Date.now()
 
     if (spanEnd < vStart) {
       indicators.push({ subsystem: span.subsystem, side: 'left', y: row.y, spanId: span.id })
@@ -293,7 +300,7 @@ function minimapSpanW(span: IOSpan): number {
   const dur = range.max - range.min
   if (dur <= 0)
     return 0
-  const end = span.endTs ?? performance.now()
+  const end = span.endTs ?? Date.now()
   return Math.max(((end - span.startTs) / dur) * chartWidth.value, 1)
 }
 

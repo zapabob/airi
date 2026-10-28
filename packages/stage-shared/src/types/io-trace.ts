@@ -15,3 +15,23 @@ export interface SerializedIOSpan {
   status: { code: number, message: string }
   ended: boolean
 }
+
+/** Runtime state of the IO trace hub that the Electron main process owns. */
+export interface IOTraceHubState {
+  /** When true, the hub keeps recent spans in memory, so a tracer window that opens later can show them. */
+  collecting: boolean
+  /** Number of spans in memory. */
+  bufferedSpans: number
+  /** The hub drops the oldest span when it has more spans than this. */
+  maxSpans: number
+  /** The hub drops spans that ended earlier than this many milliseconds ago. */
+  maxAgeMs: number
+}
+
+/** Runtime state for Electron-owned IO trace recording. */
+export interface IOTraceRecordingState {
+  directory: string
+  enabled: boolean
+  error?: string
+  filePath?: string
+}

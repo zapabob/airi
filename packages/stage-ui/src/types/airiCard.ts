@@ -1,5 +1,8 @@
 import type { Card } from '@proj-airi/ccc'
 
+import type { WakeWord } from '../libs/voice/wake-words'
+import type { CharacterAvatarModelReference } from './avatar-model'
+
 /**
  * AIRI-specific runtime configuration embedded in a character card.
  *
@@ -8,6 +11,14 @@ import type { Card } from '@proj-airi/ccc'
  * losing each other's configuration.
  */
 export interface AiriExtension {
+  wakeWords?: WakeWord[]
+
+  /** Character-owned references to stored display-model resources. */
+  avatarModels: CharacterAvatarModelReference[]
+
+  /** Avatar Model that the Character selects when it becomes active. */
+  defaultAvatarModelId?: string
+
   modules: {
     consciousness: {
       provider: string
@@ -42,8 +53,6 @@ export interface AiriExtension {
       url?: string
     }
 
-    /** ID from the display-models store. */
-    displayModelId?: string
     activeBackgroundId?: string
 
     artistry?: {

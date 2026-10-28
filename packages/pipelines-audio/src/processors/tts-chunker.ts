@@ -2,16 +2,19 @@ import type { ReaderLike } from 'clustr'
 
 import type { TextSegment, TextToken } from '../types'
 
+import { createPushStream } from '@proj-airi/stream-kit'
 import { readGraphemeClusters } from 'clustr'
-
-import { createPushStream } from '../stream'
 
 export const TTS_FLUSH_INSTRUCTION = '\u200B'
 export const TTS_SPECIAL_TOKEN = '\u2063'
 
 const regexpAnySingleDigit = /\d/
 
-const keptPunctuations = new Set('?？!！')
+/**
+ * A chunk without a letter, a digit, or an emoji, as a lone closing quote `”`, has no sound and is not a TTS request.
+ * Emoji stay, because some providers read them.
+ */
+const regexpSound = /[\p{L}\p{N}\p{Extended_Pictographic}]/u
 const hardPunctuations = new Set('.。?？!！…⋯～~\n\t\r')
 const softPunctuations = new Set(',，、–—:：;；《》「」')
 
@@ -84,17 +87,15 @@ export async function* chunkTtsInput(
   while (!current.done) {
     let value = current.value
 
-    if (value.length > 1) {
-      previousValue = value
-      current = await iterator.next()
-      continue
-    }
+    // CRLF is one grapheme cluster. Use LF so Windows line endings match
+    // the hard punctuation set and end the chunk.
+    if (value === '\r\n')
+      value = '\n'
 
     const flush = value === TTS_FLUSH_INSTRUCTION
     const special = value === TTS_SPECIAL_TOKEN
     const hard = hardPunctuations.has(value)
     const soft = softPunctuations.has(value)
-    const kept = keptPunctuations.has(value)
     let next: IteratorResult<string, void> | undefined
     let afterNext: IteratorResult<string, void> | undefined
 
@@ -144,13 +145,17 @@ export async function* chunkTtsInput(
       const words = [...segmenter.segment(buffer)].filter(w => w.isWordLike)
 
       if (chunkWordsCount > minimumWords && chunkWordsCount + words.length > maximumWords) {
-        const text = kept ? chunk.trim() + value : chunk.trim()
-        yield {
-          text,
-          words: chunkWordsCount,
-          reason: 'limit',
+        // The punctuation ends the buffer, not the chunk before it, so it stays with the buffer. Adding a `？` here too
+        // read it twice, as 方向、？ and then 移动？.
+        const text = chunk.trim()
+        if (regexpSound.test(text)) {
+          yield {
+            text,
+            words: chunkWordsCount,
+            reason: 'limit',
+          }
+          yieldCount++
         }
-        yieldCount++
         chunk = ''
         chunkWordsCount = 0
       }
@@ -174,12 +179,14 @@ export async function* chunkTtsInput(
       // own TTS request. A shorter opening clause stays in the chunk and joins the next one.
       else if (flush || hard || chunkWordsCount > maximumWords || (yieldCount < boost && chunkWordsCount >= minimumWords)) {
         const text = chunk.trim()
-        yield {
-          text,
-          words: chunkWordsCount,
-          reason: flush ? 'flush' : hard ? 'hard' : chunkWordsCount > maximumWords ? 'limit' : 'boost',
+        if (regexpSound.test(text)) {
+          yield {
+            text,
+            words: chunkWordsCount,
+            reason: flush ? 'flush' : hard ? 'hard' : chunkWordsCount > maximumWords ? 'limit' : 'boost',
+          }
+          yieldCount++
         }
-        yieldCount++
         chunk = ''
         chunkWordsCount = 0
       }
@@ -208,7 +215,7 @@ export async function* chunkTtsInput(
     current = next
   }
 
-  if (chunk.length > 0 || buffer.length > 0) {
+  if (regexpSound.test(chunk + buffer)) {
     const text = (chunk + buffer).trim()
     yield {
       text,
